@@ -1,0 +1,14 @@
+name = "RegularSurfaces"
+version = "0.1.0"
+defaultTargets = ["regularsurfaces"]
+
+[[require]]
+name = "mathlib"
+scope = "leanprover-community"
+
+[[lean_lib]]
+name = "RegularSurfaces"
+
+[[lean_exe]]
+name = "regularsurfaces"
+root = "Main"
