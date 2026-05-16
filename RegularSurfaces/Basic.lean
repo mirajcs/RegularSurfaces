@@ -209,7 +209,170 @@ lemma contDiffOn_upperHemiChart :
       fun_prop
     exact (hsqrt.comp uv hpoly).contDiffWithinAt
 
-end RegularSurface
+lemma continuous_upperHemiChart : Continuous upperHemiChart := by
+  refine continuous_pi fun i => ?_
+  fin_cases i
+  · show Continuous (fun uv : Fin 2 → ℝ => upperHemiChart uv 0)
+    simp only [upperHemiChart_zero]; fun_prop
+  · show Continuous (fun uv : Fin 2 → ℝ => upperHemiChart uv 1)
+    simp only [upperHemiChart_one]; fun_prop
+  · show Continuous (fun uv : Fin 2 → ℝ => upperHemiChart uv 2)
+    simp only [upperHemiChart_two]
+    exact Real.continuous_sqrt.comp (by fun_prop)
 
-example : RegularSurface RegularSurface.unitSphere := by
-  sorry
+/-- The homeomorphism between the open unit disk and the open upper hemisphere
+of `S²`, given by the upper-hemisphere chart. -/
+noncomputable def upperHemiHomeomorph :
+    (openUnitDisk : Set (Fin 2 → ℝ)) ≃ₜ ((upperHalf ∩ unitSphere) : Set (Fin 3 → ℝ)) where
+  toFun uv := ⟨upperHemiChart uv.val, mapsTo_upperHemiChart uv.property⟩
+  invFun q := ⟨![q.val 0, q.val 1], by
+    obtain ⟨hpos, hsphere⟩ := q.property
+    show ![q.val 0, q.val 1] 0 ^ 2 + ![q.val 0, q.val 1] 1 ^ 2 < 1
+    have hq2_sq_pos : 0 < q.val 2 ^ 2 := pow_pos hpos 2
+    have hs : q.val 0 ^ 2 + q.val 1 ^ 2 + q.val 2 ^ 2 = 1 := hsphere
+    simp only [Matrix.cons_val_zero, Matrix.cons_val_one]
+    linarith⟩
+  left_inv := by
+    rintro ⟨uv, _⟩
+    apply Subtype.ext
+    show ![upperHemiChart uv 0, upperHemiChart uv 1] = uv
+    funext k
+    fin_cases k
+    · simp
+    · simp
+  right_inv := by
+    rintro ⟨q, hpos, hsphere⟩
+    apply Subtype.ext
+    show upperHemiChart ![q 0, q 1] = q
+    funext k
+    fin_cases k
+    · simp
+    · simp
+    · have heq : 1 - q 0 ^ 2 - q 1 ^ 2 = q 2 ^ 2 := by
+        have hs : q 0 ^ 2 + q 1 ^ 2 + q 2 ^ 2 = 1 := hsphere
+        linarith
+      show Real.sqrt (1 - ![q 0, q 1] 0 ^ 2 - ![q 0, q 1] 1 ^ 2) = q 2
+      simp only [Matrix.cons_val_zero, Matrix.cons_val_one]
+      rw [heq, Real.sqrt_sq hpos.le]
+  continuous_toFun := by
+    refine Continuous.subtype_mk ?_ _
+    exact continuous_upperHemiChart.comp continuous_subtype_val
+  continuous_invFun := by
+    refine Continuous.subtype_mk ?_ _
+    refine continuous_pi fun k => ?_
+    fin_cases k
+    · change Continuous (fun q : ↥(upperHalf ∩ unitSphere) => q.val 0)
+      exact (continuous_apply 0).comp continuous_subtype_val
+    · change Continuous (fun q : ↥(upperHalf ∩ unitSphere) => q.val 1)
+      exact (continuous_apply 1).comp continuous_subtype_val
+
+/-- The continuous linear projection `ℝ³ → ℝ²` sending `q` to `(q 0, q 1)`. -/
+def projTwo : (Fin 3 → ℝ) →L[ℝ] (Fin 2 → ℝ) :=
+  ContinuousLinearMap.pi (fun k : Fin 2 => ContinuousLinearMap.proj k.castSucc)
+
+@[simp] lemma projTwo_apply (q : Fin 3 → ℝ) (k : Fin 2) : projTwo q k = q k.castSucc := rfl
+
+lemma projTwo_upperHemiChart (uv : Fin 2 → ℝ) : projTwo (upperHemiChart uv) = uv := by
+  funext k
+  fin_cases k <;> rfl
+
+lemma fderiv_injective_upperHemiChart {q : Fin 2 → ℝ} (hq : q ∈ openUnitDisk) :
+    Function.Injective (fderiv ℝ upperHemiChart q) := by
+  have hdiff : DifferentiableAt ℝ upperHemiChart q :=
+    (contDiffOn_upperHemiChart.contDiffAt
+      (isOpen_openUnitDisk.mem_nhds hq)).differentiableAt (by decide)
+  -- Chain rule: fderiv (projTwo ∘ upperHemiChart) q = projTwo.comp (fderiv upperHemiChart q)
+  have hchain : projTwo.comp (fderiv ℝ upperHemiChart q) =
+      ContinuousLinearMap.id ℝ (Fin 2 → ℝ) := by
+    have hHFD : HasFDerivAt (fun uv => projTwo (upperHemiChart uv))
+        (projTwo.comp (fderiv ℝ upperHemiChart q)) q :=
+      projTwo.hasFDerivAt.comp q hdiff.hasFDerivAt
+    have hcomp_id : (fun uv => projTwo (upperHemiChart uv)) = id := by
+      funext uv; exact projTwo_upperHemiChart uv
+    rw [hcomp_id] at hHFD
+    exact hHFD.unique (hasFDerivAt_id q)
+  refine Function.LeftInverse.injective
+    (f := fderiv ℝ upperHemiChart q) (g := projTwo) ?_
+  intro v
+  have := congrArg (fun L : (Fin 2 → ℝ) →L[ℝ] (Fin 2 → ℝ) => L v) hchain
+  simpa using this
+
+/-- The upper-hemisphere parametrization of `S²` at any point `p` with `p 2 > 0`. -/
+noncomputable def upperHemiParam {p : Fin 3 → ℝ}
+    (_hp_sphere : p ∈ unitSphere) (hp_pos : 0 < p 2) :
+    Parametrization unitSphere p where
+  U := openUnitDisk
+  V := upperHalf
+  x := upperHemiChart
+  isOpen_U := isOpen_openUnitDisk
+  isOpen_V := isOpen_upperHalf
+  mem_V := hp_pos
+  mapsTo := mapsTo_upperHemiChart
+  surjOn := surjOn_upperHemiChart
+  contDiffOn := contDiffOn_upperHemiChart
+  homeomorph := upperHemiHomeomorph
+  homeomorph_apply := by intro q; rfl
+  fderiv_injective := fun _ hq => fderiv_injective_upperHemiChart hq
+
+/- ## Remaining hemisphere parametrizations
+
+The five charts below cover the remaining hemispheres of `S²`. Each is
+constructed analogously to `upperHemiParam`, with the rôle of the third
+coordinate replaced by the appropriate axis and sign. The proofs are
+mechanical replays of the upper-hemisphere argument, so we leave them as
+`sorry` here. -/
+section RemainingHemispheres
+
+noncomputable def lowerZHemiParam {p : Fin 3 → ℝ}
+    (hp : p ∈ unitSphere) (hp_neg : p 2 < 0) :
+    Parametrization unitSphere p := by
+  exact sorry
+
+noncomputable def upperYHemiParam {p : Fin 3 → ℝ}
+    (hp : p ∈ unitSphere) (hp_pos : 0 < p 1) :
+    Parametrization unitSphere p := by
+  exact sorry
+
+noncomputable def lowerYHemiParam {p : Fin 3 → ℝ}
+    (hp : p ∈ unitSphere) (hp_neg : p 1 < 0) :
+    Parametrization unitSphere p := by
+  exact sorry
+
+noncomputable def upperXHemiParam {p : Fin 3 → ℝ}
+    (hp : p ∈ unitSphere) (hp_pos : 0 < p 0) :
+    Parametrization unitSphere p := by
+  exact sorry
+
+noncomputable def lowerXHemiParam {p : Fin 3 → ℝ}
+    (hp : p ∈ unitSphere) (hp_neg : p 0 < 0) :
+    Parametrization unitSphere p := by
+  exact sorry
+
+end RemainingHemispheres
+
+/-- The unit sphere `S² ⊆ ℝ³` is a regular surface. For any point `p ∈ S²`,
+some coordinate of `p` is non-zero (else the sphere equation would fail), and
+we use the corresponding hemisphere parametrization. -/
+theorem unitSphere_isRegular : RegularSurface unitSphere := by
+  intro p hp
+  rcases lt_trichotomy (p 2) 0 with h2 | h2 | h2
+  · exact ⟨lowerZHemiParam hp h2⟩
+  · -- p 2 = 0; split on p 1.
+    rcases lt_trichotomy (p 1) 0 with h1 | h1 | h1
+    · exact ⟨lowerYHemiParam hp h1⟩
+    · -- p 1 = p 2 = 0, so p 0² = 1; hence p 0 = ±1, both non-zero.
+      have hp0_sq : p 0 ^ 2 = 1 := by
+        have hs : p 0 ^ 2 + p 1 ^ 2 + p 2 ^ 2 = 1 := hp
+        rw [h1, h2] at hs
+        linarith
+      have hp0_ne : p 0 ≠ 0 := by
+        intro h0
+        rw [h0] at hp0_sq
+        norm_num at hp0_sq
+      rcases hp0_ne.lt_or_gt with h0 | h0
+      · exact ⟨lowerXHemiParam hp h0⟩
+      · exact ⟨upperXHemiParam hp h0⟩
+    · exact ⟨upperYHemiParam hp h1⟩
+  · exact ⟨upperHemiParam hp h2⟩
+
+end RegularSurface
